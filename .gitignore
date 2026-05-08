@@ -1,0 +1,5 @@
+data/
+logback/
+*.db
+*.db-shm
+*.db-wal

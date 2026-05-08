@@ -1,0 +1,118 @@
+package apis
+
+import (
+	"nginx-go/domains"
+
+	"github.com/gin-gonic/gin"
+	commonDomains "github.com/wfu-work/nav-common-go-lib/domains"
+	"github.com/wfu-work/nav-common-go-lib/response"
+	commonUtils "github.com/wfu-work/nav-common-go-lib/utils"
+)
+
+type SiteApi struct{}
+
+func (SiteApi) List(c *gin.Context) {
+	params := queryParams(c)
+	items, total, err := siteService.List(params)
+	if err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.Ok(commonDomains.PageResult{Data: items, Total: total, Page: commonUtils.Str2Int(params["page"]), Size: commonUtils.Str2Int(params["size"])}, c)
+}
+
+func (SiteApi) Create(c *gin.Context) {
+	var site domains.Site
+	if err := c.ShouldBindJSON(&site); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if err := siteService.Create(site); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.Ok(true, c)
+}
+
+func (SiteApi) Get(c *gin.Context) {
+	result, err := siteService.Get(c.Param("guid"))
+	if err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.Ok(result, c)
+}
+
+func (SiteApi) Update(c *gin.Context) {
+	var site domains.Site
+	if err := c.ShouldBindJSON(&site); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if err := siteService.Update(c.Param("guid"), site); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.Ok(true, c)
+}
+
+func (SiteApi) Delete(c *gin.Context) {
+	if err := siteService.Delete(c.Param("guid")); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.Ok(true, c)
+}
+
+func (SiteApi) Enable(c *gin.Context) {
+	if err := siteService.Enabled(c.Param("guid"), true); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.Ok(true, c)
+}
+
+func (SiteApi) Disable(c *gin.Context) {
+	if err := siteService.Enabled(c.Param("guid"), false); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.Ok(true, c)
+}
+
+func (SiteApi) CreateLocation(c *gin.Context) {
+	var location domains.LocationRule
+	if err := c.ShouldBindJSON(&location); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if location.SiteGuid == "" {
+		location.SiteGuid = c.Param("guid")
+	}
+	if err := siteService.CreateLocation(location); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.Ok(true, c)
+}
+
+func (SiteApi) UpdateLocation(c *gin.Context) {
+	var location domains.LocationRule
+	if err := c.ShouldBindJSON(&location); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	if err := siteService.UpdateLocation(c.Param("locationGuid"), location); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.Ok(true, c)
+}
+
+func (SiteApi) DeleteLocation(c *gin.Context) {
+	if err := siteService.DeleteLocation(c.Param("locationGuid")); err != nil {
+		response.FailWithMessage(err.Error(), c)
+		return
+	}
+	response.Ok(true, c)
+}

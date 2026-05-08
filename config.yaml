@@ -1,0 +1,41 @@
+system:
+  app-name: "nginx-go"
+  addr: 3007
+  db-type: sqlite
+  router-prefix: /api
+jwt:
+  issuer: nav-flow
+  signing-key: "nginx-go"
+local:
+  oss-path: ./data/oss
+  proxy-oss-path: /oss
+  cache-path: ./data/cache.json
+sqlite:
+  db-name: nginx-go
+  path: ./data/
+zap:
+  director: logback
+  level: info
+  prefix: '[nginx-go-server]'
+  retention-day: 3
+nginx:
+  mode: command
+  service-name: nginx
+  bin: nginx
+  systemctl: systemctl
+  docker-bin: docker
+  main-config: ""
+  managed-config: "./data/nginx/generated.conf"
+  temp-dir: "./data/nginx/tmp"
+  backup-dir: "./data/nginx/backups"
+  access-log: "/var/log/nginx/access.log"
+  error-log: "/var/log/nginx/error.log"
+  stub-status-url: ""
+  command-timeout-seconds: 10
+  require-confirm-actions:
+    - restart
+    - stop
+    - rollback
+metrics:
+  collect-interval-seconds: 30
+  retention-hours: 72

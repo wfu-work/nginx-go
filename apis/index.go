@@ -6,6 +6,8 @@ var ApiGroupApp = new(ApiGroup)
 
 type ApiGroup struct {
 	NginxApi
+	NodeApi
+	AgentApi
 	InstanceApi
 	SiteApi
 	UpstreamApi
@@ -19,6 +21,8 @@ type ApiGroup struct {
 
 var (
 	nginxService    = services.ServiceGroupApp.NginxService
+	nodeService     = services.ServiceGroupApp.NodeService
+	agentService    = services.ServiceGroupApp.AgentService
 	instanceService = services.ServiceGroupApp.InstanceService
 	siteService     = services.ServiceGroupApp.SiteService
 	upstreamService = services.ServiceGroupApp.UpstreamService
@@ -28,4 +32,5 @@ var (
 	logService      = services.ServiceGroupApp.LogService
 	settingService  = services.ServiceGroupApp.SettingService
 	auditService    = services.ServiceGroupApp.AuditService
+	eventService    = services.ServiceGroupApp.EventNotificationService
 )

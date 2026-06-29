@@ -7,6 +7,7 @@ import (
 
 type ConfigRouter struct{}
 
+// InitConfigRouter registers config render, validate, diff, publish, rollback, and history endpoints.
 func (s *ConfigRouter) InitConfigRouter(router *gin.RouterGroup) {
 	groupLogger := router.Group("configs").Use(middlewares.ApiLogger())
 	group := router.Group("configs")

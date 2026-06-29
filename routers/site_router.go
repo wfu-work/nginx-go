@@ -7,6 +7,7 @@ import (
 
 type SiteRouter struct{}
 
+// InitSiteRouter registers site and location rule management endpoints.
 func (s *SiteRouter) InitSiteRouter(router *gin.RouterGroup) {
 	groupLogger := router.Group("sites").Use(middlewares.ApiLogger())
 	group := router.Group("sites")

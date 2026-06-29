@@ -9,12 +9,11 @@ import (
 	commonUtils "github.com/wfu-work/nav-common-go-lib/utils"
 )
 
-type InstanceApi struct{}
+type NodeApi struct{}
 
-// List returns paginated nginx instances.
-func (InstanceApi) List(c *gin.Context) {
+func (NodeApi) List(c *gin.Context) {
 	params := queryParams(c)
-	items, total, err := instanceService.List(params)
+	items, total, err := nodeService.List(params)
 	if err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
@@ -22,23 +21,21 @@ func (InstanceApi) List(c *gin.Context) {
 	response.Ok(commonDomains.PageResult{Data: items, Total: total, Page: commonUtils.Str2Int(params["page"]), Size: commonUtils.Str2Int(params["size"])}, c)
 }
 
-// Create stores a nginx instance.
-func (InstanceApi) Create(c *gin.Context) {
-	var instance domains.NginxInstance
-	if err := c.ShouldBindJSON(&instance); err != nil {
+func (NodeApi) Create(c *gin.Context) {
+	var node domains.Node
+	if err := c.ShouldBindJSON(&node); err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
 	}
-	if err := instanceService.Create(instance); err != nil {
+	if err := nodeService.Create(node); err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
 	}
 	response.Ok(true, c)
 }
 
-// Get returns one nginx instance by guid.
-func (InstanceApi) Get(c *gin.Context) {
-	result, err := instanceService.Get(c.Param("guid"))
+func (NodeApi) Get(c *gin.Context) {
+	result, err := nodeService.Get(c.Param("guid"))
 	if err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
@@ -46,23 +43,21 @@ func (InstanceApi) Get(c *gin.Context) {
 	response.Ok(result, c)
 }
 
-// Update modifies one nginx instance.
-func (InstanceApi) Update(c *gin.Context) {
-	var instance domains.NginxInstance
-	if err := c.ShouldBindJSON(&instance); err != nil {
+func (NodeApi) Update(c *gin.Context) {
+	var node domains.Node
+	if err := c.ShouldBindJSON(&node); err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
 	}
-	if err := instanceService.Update(c.Param("guid"), instance); err != nil {
+	if err := nodeService.Update(c.Param("guid"), node); err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
 	}
 	response.Ok(true, c)
 }
 
-// Delete removes one nginx instance.
-func (InstanceApi) Delete(c *gin.Context) {
-	if err := instanceService.Delete(c.Param("guid")); err != nil {
+func (NodeApi) Delete(c *gin.Context) {
+	if err := nodeService.Delete(c.Param("guid")); err != nil {
 		response.FailWithMessage(err.Error(), c)
 		return
 	}

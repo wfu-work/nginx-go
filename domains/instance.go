@@ -5,6 +5,7 @@ import commonDomains "github.com/wfu-work/nav-common-go-lib/domains"
 type NginxInstance struct {
 	commonDomains.BaseDataEntity
 	Name            string `gorm:"column:name;size:100;index" json:"name"`
+	NodeGuid        string `gorm:"column:node_guid;size:50;index" json:"nodeGuid"`
 	Mode            string `gorm:"column:mode;size:30" json:"mode"`
 	Host            string `gorm:"column:host;size:255" json:"host"`
 	ServiceName     string `gorm:"column:service_name;size:100" json:"serviceName"`

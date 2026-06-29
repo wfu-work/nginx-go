@@ -26,6 +26,7 @@ type AuditRecord struct {
 	Detail       any
 }
 
+// Record writes a best-effort audit log; audit failures are logged but do not break user actions.
 func (s AuditService) Record(record AuditRecord) {
 	if global.NAV_DB == nil {
 		return
@@ -52,6 +53,7 @@ func (s AuditService) Record(record AuditRecord) {
 	}
 }
 
+// List returns paginated audit records.
 func (s AuditService) List(params map[string]string) (interface{}, int64, error) {
 	pageInfo := commonUtils.ToPageInfo(params)
 	if pageInfo.Desc == "" && pageInfo.Asc == "" {

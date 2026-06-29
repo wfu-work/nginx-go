@@ -35,6 +35,7 @@ type StubStatusResult struct {
 	Waiting  int `json:"waiting"`
 }
 
+// Summary combines process status and nginx stub_status for one instance.
 func (s MetricService) Summary(instanceGuid string) (MetricSummary, error) {
 	runtime, err := resolveNginxRuntime(instanceGuid)
 	if err != nil {
@@ -48,6 +49,7 @@ func (s MetricService) Summary(instanceGuid string) (MetricSummary, error) {
 	return MetricSummary{InstanceGuid: runtime.InstanceGuid, Status: status, StubStatus: stub, CheckedAt: time.Now().UnixMilli()}, nil
 }
 
+// StubStatus fetches and parses nginx stub_status output.
 func (s MetricService) StubStatus(instanceGuid string) (*StubStatusResult, error) {
 	runtime, err := resolveNginxRuntime(instanceGuid)
 	if err != nil {
@@ -55,6 +57,13 @@ func (s MetricService) StubStatus(instanceGuid string) (*StubStatusResult, error
 	}
 	if runtime.StubStatusURL == "" {
 		return nil, errors.New("nginx.stub-status-url is empty")
+	}
+	if runtime.Remote {
+		var result StubStatusResult
+		if err := dispatchAgent(runtime, AgentTaskNginxStubStatus, AgentNginxRequest{Runtime: buildAgentRuntime(runtime)}, &result); err != nil {
+			return nil, err
+		}
+		return &result, nil
 	}
 	client := http.Client{Timeout: runtime.Timeout}
 	resp, err := client.Get(runtime.StubStatusURL)
@@ -69,13 +78,23 @@ func (s MetricService) StubStatus(instanceGuid string) (*StubStatusResult, error
 	return parseStubStatus(string(body))
 }
 
+// Process returns detected nginx OS processes.
 func (s MetricService) Process(instanceGuid string) ([]ProcessStatus, error) {
-	if _, err := resolveNginxRuntime(instanceGuid); err != nil {
+	runtime, err := resolveNginxRuntime(instanceGuid)
+	if err != nil {
 		return nil, err
+	}
+	if runtime.Remote {
+		var result []ProcessStatus
+		if err := dispatchAgent(runtime, AgentTaskNginxProcess, AgentNginxRequest{Runtime: buildAgentRuntime(runtime)}, &result); err != nil {
+			return nil, err
+		}
+		return result, nil
 	}
 	return nginxProcesses(), nil
 }
 
+// Collect stores summary metric samples for all enabled instances.
 func (s MetricService) Collect() error {
 	runtimes, err := listNginxRuntimes()
 	if err != nil {
@@ -105,6 +124,7 @@ func (s MetricService) Collect() error {
 	return firstErr
 }
 
+// Samples returns paginated metric samples.
 func (s MetricService) Samples(params map[string]string) (interface{}, int64, error) {
 	pageInfo := commonUtils.ToPageInfo(params)
 	if pageInfo.Desc == "" && pageInfo.Asc == "" {

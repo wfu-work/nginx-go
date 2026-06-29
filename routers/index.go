@@ -6,6 +6,8 @@ var RouterGroupApp = new(RouterGroup)
 
 type RouterGroup struct {
 	NginxRouter
+	NodeRouter
+	AgentRouter
 	InstanceRouter
 	SiteRouter
 	UpstreamRouter
@@ -19,6 +21,8 @@ type RouterGroup struct {
 
 var (
 	nginxApi    = apis.ApiGroupApp.NginxApi
+	nodeApi     = apis.ApiGroupApp.NodeApi
+	agentApi    = apis.ApiGroupApp.AgentApi
 	instanceApi = apis.ApiGroupApp.InstanceApi
 	siteApi     = apis.ApiGroupApp.SiteApi
 	upstreamApi = apis.ApiGroupApp.UpstreamApi

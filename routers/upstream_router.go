@@ -7,6 +7,7 @@ import (
 
 type UpstreamRouter struct{}
 
+// InitUpstreamRouter registers upstream group, server, and health endpoints.
 func (s *UpstreamRouter) InitUpstreamRouter(router *gin.RouterGroup) {
 	groupLogger := router.Group("upstreams").Use(middlewares.ApiLogger())
 	group := router.Group("upstreams")

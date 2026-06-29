@@ -93,6 +93,7 @@ type DiffResult struct {
 	HTML     string `json:"html"`
 }
 
+// Render builds nginx config text from enabled sites, locations, upstreams, and certificates.
 func (s ConfigService) Render(req RenderRequest) (RenderResult, error) {
 	config, err := s.renderConfig(req.SiteGuid)
 	if err != nil {
@@ -110,6 +111,7 @@ func (s ConfigService) Render(req RenderRequest) (RenderResult, error) {
 	return result, nil
 }
 
+// Validate writes config to a temp file and delegates syntax checking to `nginx -t`.
 func (s ConfigService) Validate(req ValidateRequest) (ValidateResult, error) {
 	config := req.Config
 	if config == "" {
@@ -118,6 +120,13 @@ func (s ConfigService) Validate(req ValidateRequest) (ValidateResult, error) {
 			return ValidateResult{}, err
 		}
 		config = rendered
+	}
+	runtime, err := resolveNginxRuntime(req.InstanceGuid)
+	if err != nil {
+		return ValidateResult{}, err
+	}
+	if runtime.Remote {
+		return s.validateRemote(req, runtime, config)
 	}
 	configPath, err := writeTempConfig(config)
 	if err != nil {
@@ -146,6 +155,7 @@ func (s ConfigService) Validate(req ValidateRequest) (ValidateResult, error) {
 	return result, nil
 }
 
+// Publish validates, atomically writes managed config, reloads nginx, and records the task.
 func (s ConfigService) Publish(req PublishRequest) (PublishResult, error) {
 	version, err := s.resolvePublishVersion(req)
 	if err != nil {
@@ -154,6 +164,7 @@ func (s ConfigService) Publish(req PublishRequest) (PublishResult, error) {
 	return s.publishVersion(version, req.InstanceGuid, "publish", req.Reason, "")
 }
 
+// Rollback republishes a previous config version after explicit confirmation.
 func (s ConfigService) Rollback(req RollbackRequest) (PublishResult, error) {
 	if req.VersionGuid == "" {
 		return PublishResult{}, errors.New("missing version guid")
@@ -175,6 +186,7 @@ func (s ConfigService) Rollback(req RollbackRequest) (PublishResult, error) {
 	return s.publishVersion(rollbackVersion, req.InstanceGuid, "rollback", req.Reason, version.Guid)
 }
 
+// Diff compares two supplied config bodies or saved config versions.
 func (s ConfigService) Diff(req DiffRequest) (DiffResult, error) {
 	fromConfig := req.FromConfig
 	toConfig := req.ToConfig
@@ -203,6 +215,7 @@ func (s ConfigService) Diff(req DiffRequest) (DiffResult, error) {
 	}, nil
 }
 
+// VersionList returns paginated config versions.
 func (s ConfigService) VersionList(params map[string]string) (interface{}, int64, error) {
 	pageInfo := commonUtils.ToPageInfo(params)
 	if pageInfo.Desc == "" && pageInfo.Asc == "" {
@@ -211,6 +224,7 @@ func (s ConfigService) VersionList(params map[string]string) (interface{}, int64
 	return s.List(pageInfo, "status,reason")
 }
 
+// VersionGet returns one saved config version by guid.
 func (s ConfigService) VersionGet(guid string) (*domains.ConfigVersion, error) {
 	if guid == "" {
 		return nil, errors.New("missing version guid")
@@ -225,6 +239,7 @@ func (s ConfigService) VersionGet(guid string) (*domains.ConfigVersion, error) {
 	return version, nil
 }
 
+// TaskList returns paginated publish and rollback task history.
 func (s ConfigService) TaskList(params map[string]string) (interface{}, int64, error) {
 	pageInfo := commonUtils.ToPageInfo(params)
 	if pageInfo.Desc == "" && pageInfo.Asc == "" {
@@ -330,6 +345,9 @@ func (s ConfigService) publishVersion(version *domains.ConfigVersion, instanceGu
 	if err != nil {
 		return PublishResult{}, err
 	}
+	if runtime.Remote {
+		return s.publishRemoteVersion(version, runtime, action, reason, rollbackFrom, start)
+	}
 	validateResult, err := s.Validate(ValidateRequest{InstanceGuid: runtime.InstanceGuid, Config: version.Config, SiteGuid: version.SiteGuid, Reason: reason})
 	if err != nil {
 		task, taskErr := s.recordPublishTask(version.Guid, action, false, "", "", validateResult.Message, "", time.Since(start).Milliseconds(), reason)
@@ -378,6 +396,75 @@ func (s ConfigService) publishVersion(version *domains.ConfigVersion, instanceGu
 	return result, reloadErr
 }
 
+func (s ConfigService) validateRemote(req ValidateRequest, runtime nginxRuntime, config string) (ValidateResult, error) {
+	var result ValidateResult
+	err := dispatchAgent(runtime, AgentTaskNginxConfigValidate, AgentNginxRequest{
+		Runtime: buildAgentRuntime(runtime),
+		Config:  config,
+		Reason:  req.Reason,
+	}, &result)
+	if err != nil {
+		return result, err
+	}
+	if req.Save {
+		version, versionErr := s.createVersion(req.SiteGuid, config, domains.ConfigVersionStatusValidated, result.Success, result.Output, req.Reason, "")
+		if versionErr != nil {
+			return ValidateResult{}, versionErr
+		}
+		result.VersionGuid = version.Guid
+		result.VersionNo = version.VersionNo
+	}
+	if !result.Success {
+		return result, errors.New(result.Message)
+	}
+	return result, nil
+}
+
+func (s ConfigService) publishRemoteVersion(version *domains.ConfigVersion, runtime nginxRuntime, action, reason, rollbackFrom string, start time.Time) (PublishResult, error) {
+	var agentResult PublishResult
+	err := dispatchAgent(runtime, AgentTaskNginxConfigPublish, AgentNginxRequest{
+		Runtime:    buildAgentRuntime(runtime),
+		Action:     action,
+		Config:     version.Config,
+		TargetPath: managedConfigPath(runtime),
+		Reason:     reason,
+	}, &agentResult)
+	success := err == nil && agentResult.Success
+	message := agentResult.Message
+	if err != nil {
+		message = err.Error()
+	}
+	if message == "" {
+		message = "remote config publish finished"
+		if !success {
+			message = "remote config publish failed"
+		}
+	}
+	task, taskErr := s.recordPublishTask(version.Guid, action, success, agentResult.TargetPath, agentResult.BackupPath, message, agentResult.OperationGuid, time.Since(start).Milliseconds(), reason)
+	if taskErr != nil {
+		return PublishResult{}, taskErr
+	}
+	result := publishResultFromTask(task, version.Guid)
+	if agentResult.DurationMs > 0 {
+		result.DurationMs = agentResult.DurationMs
+	}
+	if success {
+		now := time.Now().UnixMilli()
+		status := domains.ConfigVersionStatusPublished
+		if action == "rollback" {
+			status = domains.ConfigVersionStatusRolledBack
+		}
+		global.NAV_DB.Model(&domains.ConfigVersion{}).Where("guid = ?", version.Guid).Updates(map[string]any{
+			"status":       status,
+			"validate_ok":  true,
+			"validate_msg": agentResult.Message,
+			"published_at": now,
+		})
+	}
+	s.auditConfigChange(action, runtime.InstanceGuid, result, reason, rollbackFrom)
+	return result, err
+}
+
 func (s ConfigService) auditConfigChange(action, instanceGuid string, result PublishResult, reason, rollbackFrom string) {
 	auditAction := domains.AuditActionConfigPublish
 	if action == "rollback" {
@@ -398,6 +485,17 @@ func (s ConfigService) auditConfigChange(action, instanceGuid string, result Pub
 			"backupPath":    result.BackupPath,
 			"rollbackFrom":  rollbackFrom,
 		},
+	})
+	title := "配置发布" + statusTitle(result.Success)
+	if action == "rollback" {
+		title = "配置回滚" + statusTitle(result.Success)
+	}
+	ServiceGroupApp.EventNotificationService.Notify(EventNotificationCreate{
+		Title:      title,
+		Content:    result.Message,
+		Level:      notificationLevel(result.Success),
+		SourceType: "config_version",
+		SourceGuid: result.VersionGuid,
 	})
 }
 

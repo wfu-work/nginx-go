@@ -13,6 +13,7 @@ import (
 
 type NginxApi struct{}
 
+// Status returns current nginx runtime status for an instance.
 func (NginxApi) Status(c *gin.Context) {
 	result, err := nginxService.Status(c.Query("instanceGuid"))
 	if err != nil {
@@ -23,6 +24,7 @@ func (NginxApi) Status(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Refresh records a manual status refresh operation.
 func (NginxApi) Refresh(c *gin.Context) {
 	req := bindOperationRequest(c)
 	result, err := nginxService.Refresh(req)
@@ -34,6 +36,7 @@ func (NginxApi) Refresh(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Test validates nginx configuration with `nginx -t`.
 func (NginxApi) Test(c *gin.Context) {
 	req := bindOperationRequest(c)
 	result, err := nginxService.Test(req)
@@ -45,6 +48,7 @@ func (NginxApi) Test(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Reload validates then reloads nginx.
 func (NginxApi) Reload(c *gin.Context) {
 	req := bindOperationRequest(c)
 	result, err := nginxService.Reload(req)
@@ -56,6 +60,7 @@ func (NginxApi) Reload(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Restart restarts nginx after confirmation validation.
 func (NginxApi) Restart(c *gin.Context) {
 	req := bindOperationRequest(c)
 	result, err := nginxService.Restart(req)
@@ -67,6 +72,7 @@ func (NginxApi) Restart(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Start starts nginx for the selected instance.
 func (NginxApi) Start(c *gin.Context) {
 	req := bindOperationRequest(c)
 	result, err := nginxService.Start(req)
@@ -78,6 +84,7 @@ func (NginxApi) Start(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Stop stops nginx after confirmation validation.
 func (NginxApi) Stop(c *gin.Context) {
 	req := bindOperationRequest(c)
 	result, err := nginxService.Stop(req)
@@ -89,6 +96,7 @@ func (NginxApi) Stop(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// OperationList returns paginated nginx operation history.
 func (NginxApi) OperationList(c *gin.Context) {
 	params := queryParams(c)
 	items, total, err := nginxService.OperationList(params)
@@ -105,6 +113,7 @@ func (NginxApi) OperationList(c *gin.Context) {
 	}, c)
 }
 
+// OperationGet returns one nginx operation by guid.
 func (NginxApi) OperationGet(c *gin.Context) {
 	result, err := nginxService.OperationGet(c.Param("guid"))
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 
 type NginxRouter struct{}
 
+// InitNginxRouter registers nginx process operation and operation history endpoints.
 func (s *NginxRouter) InitNginxRouter(router *gin.RouterGroup) {
 	groupLogger := router.Group("nginx").Use(middlewares.ApiLogger())
 	group := router.Group("nginx")

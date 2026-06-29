@@ -9,6 +9,7 @@ import (
 
 type MetricApi struct{}
 
+// Summary returns combined nginx status and stub_status metrics.
 func (MetricApi) Summary(c *gin.Context) {
 	result, err := metricService.Summary(c.Query("instanceGuid"))
 	if err != nil {
@@ -18,6 +19,7 @@ func (MetricApi) Summary(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// StubStatus returns parsed nginx stub_status counters.
 func (MetricApi) StubStatus(c *gin.Context) {
 	result, err := metricService.StubStatus(c.Query("instanceGuid"))
 	if err != nil {
@@ -27,6 +29,7 @@ func (MetricApi) StubStatus(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Process returns detected nginx process metrics.
 func (MetricApi) Process(c *gin.Context) {
 	result, err := metricService.Process(c.Query("instanceGuid"))
 	if err != nil {
@@ -36,6 +39,7 @@ func (MetricApi) Process(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Samples returns persisted metric samples.
 func (MetricApi) Samples(c *gin.Context) {
 	params := queryParams(c)
 	items, total, err := metricService.Samples(params)

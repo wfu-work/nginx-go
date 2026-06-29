@@ -25,6 +25,7 @@ type NginxService struct {
 type OperationRequest struct {
 	InstanceGuid string `json:"instanceGuid"`
 	ConfigPath   string `json:"configPath"`
+	Config       string `json:"config"`
 	Confirm      bool   `json:"confirm"`
 	Reason       string `json:"reason"`
 }
@@ -51,6 +52,9 @@ type StatusResult struct {
 
 type nginxRuntime struct {
 	InstanceGuid    string
+	NodeGuid        string
+	NodeName        string
+	Remote          bool
 	Mode            string
 	Bin             string
 	Systemctl       string
@@ -72,17 +76,29 @@ type ProcessStatus struct {
 	MemoryMB   float32 `json:"memoryMb"`
 }
 
+// Status returns runtime state, version output, and detected nginx processes for one instance.
 func (s NginxService) Status(instanceGuid string) (StatusResult, error) {
 	runtime, err := resolveNginxRuntime(instanceGuid)
 	if err != nil {
 		return StatusResult{}, err
+	}
+	if runtime.Remote {
+		var result StatusResult
+		err := dispatchAgent(runtime, AgentTaskNginxStatus, AgentNginxRequest{Runtime: buildAgentRuntime(runtime)}, &result)
+		if result.InstanceGuid == "" {
+			result.InstanceGuid = runtime.InstanceGuid
+		}
+		if result.Mode == "" {
+			result.Mode = runtime.Mode
+		}
+		return result, err
 	}
 	processes := nginxProcesses()
 	version := nginxVersion(runtime)
 	result := StatusResult{
 		InstanceGuid: runtime.InstanceGuid,
 		Mode:         runtime.Mode,
-		Running:      len(processes) > 0 || systemdIsActive(runtime) || dockerIsRunning(runtime),
+		Running:      nginxIsRunning(runtime, processes),
 		Message:      "nginx status refreshed",
 		Version:      version.Output,
 		Processes:    processes,
@@ -94,16 +110,21 @@ func (s NginxService) Status(instanceGuid string) (StatusResult, error) {
 	return result, nil
 }
 
+// Refresh records a manual refresh operation; live status details are returned by Status.
 func (s NginxService) Refresh(req OperationRequest) (OperationResult, error) {
 	return s.recordOnly(domains.NginxActionRefresh, req, true, "nginx status refreshed", "", "", 0)
 }
 
+// Test runs `nginx -t` against the instance main config or a caller-supplied temp config.
 func (s NginxService) Test(req OperationRequest) (OperationResult, error) {
 	runtime, err := resolveNginxRuntime(req.InstanceGuid)
 	if err != nil {
 		return OperationResult{}, err
 	}
 	req.InstanceGuid = runtime.InstanceGuid
+	if runtime.Remote {
+		return s.runAgentOperation(domains.NginxActionTest, req, runtime)
+	}
 	args := []string{"-t"}
 	if req.ConfigPath != "" {
 		args = append(args, "-c", req.ConfigPath)
@@ -114,6 +135,7 @@ func (s NginxService) Test(req OperationRequest) (OperationResult, error) {
 	return s.recordCommand(domains.NginxActionTest, req, result, "nginx config test success", "nginx config test failed")
 }
 
+// Reload validates config first, then performs a whitelisted nginx reload command.
 func (s NginxService) Reload(req OperationRequest) (OperationResult, error) {
 	testResult, err := s.Test(req)
 	if err != nil || !testResult.Success {
@@ -125,6 +147,7 @@ func (s NginxService) Reload(req OperationRequest) (OperationResult, error) {
 	return s.runServiceAction(domains.NginxActionReload, req)
 }
 
+// Restart restarts nginx after required confirmation checks pass.
 func (s NginxService) Restart(req OperationRequest) (OperationResult, error) {
 	if err := requireConfirm(domains.NginxActionRestart, req); err != nil {
 		return OperationResult{}, err
@@ -132,10 +155,12 @@ func (s NginxService) Restart(req OperationRequest) (OperationResult, error) {
 	return s.runServiceAction(domains.NginxActionRestart, req)
 }
 
+// Start starts nginx through the configured command, systemd unit, or Docker container.
 func (s NginxService) Start(req OperationRequest) (OperationResult, error) {
 	return s.runServiceAction(domains.NginxActionStart, req)
 }
 
+// Stop stops nginx after required confirmation checks pass.
 func (s NginxService) Stop(req OperationRequest) (OperationResult, error) {
 	if err := requireConfirm(domains.NginxActionStop, req); err != nil {
 		return OperationResult{}, err
@@ -143,6 +168,7 @@ func (s NginxService) Stop(req OperationRequest) (OperationResult, error) {
 	return s.runServiceAction(domains.NginxActionStop, req)
 }
 
+// OperationList returns paginated nginx operation records for UI history views.
 func (s NginxService) OperationList(params map[string]string) (interface{}, int64, error) {
 	pageInfo := commonUtils.ToPageInfo(params)
 	if pageInfo.Desc == "" && pageInfo.Asc == "" {
@@ -151,6 +177,7 @@ func (s NginxService) OperationList(params map[string]string) (interface{}, int6
 	return s.List(pageInfo, "action,status,message,reason")
 }
 
+// OperationGet returns one operation record by guid.
 func (s NginxService) OperationGet(guid string) (*domains.NginxOperation, error) {
 	if guid == "" {
 		return nil, errors.New("missing operation guid")
@@ -171,6 +198,9 @@ func (s NginxService) runServiceAction(action string, req OperationRequest) (Ope
 		return OperationResult{}, err
 	}
 	req.InstanceGuid = runtime.InstanceGuid
+	if runtime.Remote {
+		return s.runAgentOperation(action, req, runtime)
+	}
 	var result commandUtils.CommandResult
 	switch runtime.Mode {
 	case "systemd":
@@ -183,6 +213,25 @@ func (s NginxService) runServiceAction(action string, req OperationRequest) (Ope
 		return OperationResult{}, fmt.Errorf("unsupported nginx mode: %s", runtime.Mode)
 	}
 	return s.recordCommand(action, req, result, fmt.Sprintf("nginx %s success", action), fmt.Sprintf("nginx %s failed", action))
+}
+
+func (s NginxService) runAgentOperation(action string, req OperationRequest, runtime nginxRuntime) (OperationResult, error) {
+	var cmd commandUtils.CommandResult
+	err := dispatchAgent(runtime, AgentTaskNginxOperation, AgentNginxRequest{
+		Runtime:    buildAgentRuntime(runtime),
+		Action:     action,
+		ConfigPath: req.ConfigPath,
+		Config:     req.Config,
+		Reason:     req.Reason,
+	}, &cmd)
+	if err != nil {
+		result, recordErr := s.recordCommand(action, req, commandUtils.CommandResult{Success: false, Output: err.Error()}, fmt.Sprintf("nginx %s success", action), fmt.Sprintf("nginx %s failed", action))
+		if recordErr != nil {
+			return result, recordErr
+		}
+		return result, err
+	}
+	return s.recordCommand(action, req, cmd, fmt.Sprintf("nginx %s success", action), fmt.Sprintf("nginx %s failed", action))
 }
 
 func runCommandMode(runtime nginxRuntime, action string) commandUtils.CommandResult {
@@ -267,6 +316,13 @@ func (s NginxService) recordOnly(action string, req OperationRequest, success bo
 				"durationMs":   durationMs,
 			},
 		})
+		ServiceGroupApp.EventNotificationService.Notify(EventNotificationCreate{
+			Title:      "Nginx 操作" + statusTitle(success),
+			Content:    fmt.Sprintf("%s：%s", action, message),
+			Level:      notificationLevel(success),
+			SourceType: "nginx_operation",
+			SourceGuid: op.Guid,
+		})
 	}
 	return OperationResult{
 		OperationGuid: op.Guid,
@@ -277,6 +333,20 @@ func (s NginxService) recordOnly(action string, req OperationRequest, success bo
 		Output:        output,
 		DurationMs:    durationMs,
 	}, nil
+}
+
+func statusTitle(success bool) string {
+	if success {
+		return "成功"
+	}
+	return "失败"
+}
+
+func notificationLevel(success bool) string {
+	if success {
+		return domains.EventNotificationLevelInfo
+	}
+	return domains.EventNotificationLevelError
 }
 
 func isAuditedNginxAction(action string) bool {
@@ -328,6 +398,17 @@ func systemdIsActive(runtime nginxRuntime) bool {
 	}
 	result := commandUtils.RunCommand(runtime.Timeout, runtime.Systemctl, "is-active", runtime.ServiceName)
 	return result.Success && strings.TrimSpace(result.Output) == "active"
+}
+
+func nginxIsRunning(runtime nginxRuntime, processes []ProcessStatus) bool {
+	switch runtime.Mode {
+	case "systemd":
+		return systemdIsActive(runtime) || len(processes) > 0
+	case "docker":
+		return dockerIsRunning(runtime)
+	default:
+		return len(processes) > 0
+	}
 }
 
 func dockerIsRunning(runtime nginxRuntime) bool {
@@ -413,7 +494,9 @@ func resolveNginxRuntime(instanceGuid string) (nginxRuntime, error) {
 	if !instance.Enabled {
 		return runtime, fmt.Errorf("nginx instance is disabled: %s", runtime.InstanceGuid)
 	}
-	applyInstanceRuntime(&runtime, instance)
+	if err := applyInstanceRuntime(&runtime, instance); err != nil {
+		return runtime, err
+	}
 	return runtime, nil
 }
 
@@ -447,7 +530,13 @@ func listNginxRuntimes() ([]nginxRuntime, error) {
 	return runtimes, nil
 }
 
-func applyInstanceRuntime(runtime *nginxRuntime, instance domains.NginxInstance) {
+func applyInstanceRuntime(runtime *nginxRuntime, instance domains.NginxInstance) error {
+	if instance.NodeGuid != "" {
+		runtime.NodeGuid = instance.NodeGuid
+		if err := applyNodeRuntime(runtime, instance.NodeGuid); err != nil {
+			return err
+		}
+	}
 	if instance.Mode != "" {
 		runtime.Mode = instance.Mode
 	}
@@ -478,6 +567,29 @@ func applyInstanceRuntime(runtime *nginxRuntime, instance domains.NginxInstance)
 	if instance.StubStatusURL != "" {
 		runtime.StubStatusURL = instance.StubStatusURL
 	}
+	return nil
+}
+
+func applyNodeRuntime(runtime *nginxRuntime, nodeGuid string) error {
+	if global.NAV_DB == nil || nodeGuid == "" {
+		return nil
+	}
+	var node domains.Node
+	result := global.NAV_DB.Where("guid = ?", nodeGuid).Find(&node)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("nginx node not found: %s", nodeGuid)
+	}
+	if !node.Enabled {
+		return fmt.Errorf("nginx node is disabled: %s", nodeGuid)
+	}
+	runtime.NodeName = node.Name
+	if node.AccessMode == domains.NodeAccessAgent {
+		runtime.Remote = true
+	}
+	return nil
 }
 
 func defaultInstanceGuid(instanceGuid string) string {

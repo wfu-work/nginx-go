@@ -11,6 +11,7 @@ import (
 
 type SiteApi struct{}
 
+// List returns paginated sites.
 func (SiteApi) List(c *gin.Context) {
 	params := queryParams(c)
 	items, total, err := siteService.List(params)
@@ -21,6 +22,7 @@ func (SiteApi) List(c *gin.Context) {
 	response.Ok(commonDomains.PageResult{Data: items, Total: total, Page: commonUtils.Str2Int(params["page"]), Size: commonUtils.Str2Int(params["size"])}, c)
 }
 
+// Create stores a site.
 func (SiteApi) Create(c *gin.Context) {
 	var site domains.Site
 	if err := c.ShouldBindJSON(&site); err != nil {
@@ -34,6 +36,7 @@ func (SiteApi) Create(c *gin.Context) {
 	response.Ok(true, c)
 }
 
+// Get returns a site with its location rules.
 func (SiteApi) Get(c *gin.Context) {
 	result, err := siteService.Get(c.Param("guid"))
 	if err != nil {
@@ -43,6 +46,7 @@ func (SiteApi) Get(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Update modifies a site.
 func (SiteApi) Update(c *gin.Context) {
 	var site domains.Site
 	if err := c.ShouldBindJSON(&site); err != nil {
@@ -56,6 +60,7 @@ func (SiteApi) Update(c *gin.Context) {
 	response.Ok(true, c)
 }
 
+// Delete removes a site by guid.
 func (SiteApi) Delete(c *gin.Context) {
 	if err := siteService.Delete(c.Param("guid")); err != nil {
 		response.FailWithMessage(err.Error(), c)
@@ -64,6 +69,7 @@ func (SiteApi) Delete(c *gin.Context) {
 	response.Ok(true, c)
 }
 
+// Enable marks a site as enabled for config rendering.
 func (SiteApi) Enable(c *gin.Context) {
 	if err := siteService.Enabled(c.Param("guid"), true); err != nil {
 		response.FailWithMessage(err.Error(), c)
@@ -72,6 +78,7 @@ func (SiteApi) Enable(c *gin.Context) {
 	response.Ok(true, c)
 }
 
+// Disable marks a site as disabled for config rendering.
 func (SiteApi) Disable(c *gin.Context) {
 	if err := siteService.Enabled(c.Param("guid"), false); err != nil {
 		response.FailWithMessage(err.Error(), c)
@@ -80,6 +87,7 @@ func (SiteApi) Disable(c *gin.Context) {
 	response.Ok(true, c)
 }
 
+// CreateLocation stores a location rule under a site.
 func (SiteApi) CreateLocation(c *gin.Context) {
 	var location domains.LocationRule
 	if err := c.ShouldBindJSON(&location); err != nil {
@@ -96,6 +104,7 @@ func (SiteApi) CreateLocation(c *gin.Context) {
 	response.Ok(true, c)
 }
 
+// UpdateLocation modifies one location rule.
 func (SiteApi) UpdateLocation(c *gin.Context) {
 	var location domains.LocationRule
 	if err := c.ShouldBindJSON(&location); err != nil {
@@ -109,6 +118,7 @@ func (SiteApi) UpdateLocation(c *gin.Context) {
 	response.Ok(true, c)
 }
 
+// DeleteLocation removes one location rule.
 func (SiteApi) DeleteLocation(c *gin.Context) {
 	if err := siteService.DeleteLocation(c.Param("locationGuid")); err != nil {
 		response.FailWithMessage(err.Error(), c)

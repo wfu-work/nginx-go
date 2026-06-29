@@ -11,6 +11,7 @@ import (
 
 type SettingApi struct{}
 
+// List returns runtime settings.
 func (SettingApi) List(c *gin.Context) {
 	params := queryParams(c)
 	items, total, err := settingService.List(params)
@@ -21,6 +22,7 @@ func (SettingApi) List(c *gin.Context) {
 	response.Ok(commonDomains.PageResult{Data: items, Total: total, Page: commonUtils.Str2Int(params["page"]), Size: commonUtils.Str2Int(params["size"])}, c)
 }
 
+// Save creates or updates one runtime setting.
 func (SettingApi) Save(c *gin.Context) {
 	var setting domains.Setting
 	if err := c.ShouldBindJSON(&setting); err != nil {
@@ -34,6 +36,7 @@ func (SettingApi) Save(c *gin.Context) {
 	response.Ok(true, c)
 }
 
+// Delete removes one runtime setting.
 func (SettingApi) Delete(c *gin.Context) {
 	if err := settingService.Delete(c.Param("guid")); err != nil {
 		response.FailWithMessage(err.Error(), c)

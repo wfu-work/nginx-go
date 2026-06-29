@@ -13,10 +13,12 @@ type SettingService struct {
 	commonServices.CrudService[domains.Setting]
 }
 
+// List returns paginated runtime settings.
 func (s SettingService) List(params map[string]string) (interface{}, int64, error) {
 	return s.CrudService.List(commonUtils.ToPageInfo(params), "key,description")
 }
 
+// Save creates or updates a runtime setting by key.
 func (s SettingService) Save(setting domains.Setting) error {
 	if setting.Key == "" {
 		return errors.New("missing setting key")
@@ -30,6 +32,7 @@ func (s SettingService) Save(setting domains.Setting) error {
 	return s.CrudService.Create(setting)
 }
 
+// Delete soft-deletes one setting by guid.
 func (s SettingService) Delete(guid string) error {
 	if guid == "" {
 		return errors.New("missing setting guid")

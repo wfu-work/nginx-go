@@ -4,6 +4,8 @@ var ServiceGroupApp = new(ServiceGroup)
 
 type ServiceGroup struct {
 	NginxService
+	NodeService
+	AgentService
 	InstanceService
 	SiteService
 	UpstreamService
@@ -13,4 +15,5 @@ type ServiceGroup struct {
 	LogService
 	SettingService
 	AuditService
+	EventNotificationService
 }

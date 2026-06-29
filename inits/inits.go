@@ -15,11 +15,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// Init wires database migrations, routers, scheduled jobs, and starts the common runtime.
 func Init() {
 	sysInit := commonInits.SysInit{}
 	sysInit.OnTableInit(registerTables)
 	sysInit.OnRouterInit(func(publicGroup *gin.RouterGroup, privateGroup *gin.RouterGroup) {
 		routers.RouterGroupApp.InitNginxRouter(privateGroup)
+		routers.RouterGroupApp.InitNodeRouter(privateGroup)
+		routers.RouterGroupApp.InitAgentRouter(privateGroup)
 		routers.RouterGroupApp.InitInstanceRouter(privateGroup)
 		routers.RouterGroupApp.InitSiteRouter(privateGroup)
 		routers.RouterGroupApp.InitUpstreamRouter(privateGroup)
@@ -34,9 +37,12 @@ func Init() {
 	sysInit.Init()
 }
 
+// registerTables auto-migrates nginx business tables during application startup.
 func registerTables() {
 	err := global.NAV_DB.AutoMigrate(
 		domains.NginxOperation{},
+		domains.Node{},
+		domains.AgentTask{},
 		domains.NginxInstance{},
 		domains.Site{},
 		domains.LocationRule{},
@@ -46,8 +52,11 @@ func registerTables() {
 		domains.ConfigVersion{},
 		domains.PublishTask{},
 		domains.MetricSample{},
+		domains.AccessLogRecord{},
+		domains.ErrorLogRecord{},
 		domains.Setting{},
 		domains.AuditLog{},
+		domains.EventNotification{},
 	)
 	if err != nil {
 		global.NAV_LOG.Error("register nginx business table failed", zap.Error(err))
@@ -56,6 +65,7 @@ func registerTables() {
 	global.NAV_LOG.Info("register nginx business table success")
 }
 
+// registerSchedules installs background collectors for metrics, upstream health, and error logs.
 func registerSchedules(timers scheduleds.Timer, options []cron.Option) {
 	interval := metricCollectInterval()
 	spec := "*/" + interval + " * * * * *"

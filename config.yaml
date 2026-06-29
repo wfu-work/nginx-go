@@ -39,3 +39,5 @@ nginx:
 metrics:
   collect-interval-seconds: 30
   retention-hours: 72
+agent:
+  shared-token: ""

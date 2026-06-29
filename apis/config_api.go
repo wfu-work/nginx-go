@@ -11,6 +11,7 @@ import (
 
 type ConfigApi struct{}
 
+// Render generates nginx config preview from structured site/upstream data.
 func (ConfigApi) Render(c *gin.Context) {
 	var req services.RenderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -24,6 +25,7 @@ func (ConfigApi) Render(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Validate checks generated or supplied config using nginx syntax validation.
 func (ConfigApi) Validate(c *gin.Context) {
 	var req services.ValidateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -43,6 +45,7 @@ func (ConfigApi) Validate(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Publish validates, writes managed config, reloads nginx, and records publish history.
 func (ConfigApi) Publish(c *gin.Context) {
 	var req services.PublishRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -60,6 +63,7 @@ func (ConfigApi) Publish(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Rollback republishes a previous config version after confirmation.
 func (ConfigApi) Rollback(c *gin.Context) {
 	var req services.RollbackRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -77,6 +81,7 @@ func (ConfigApi) Rollback(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// Diff returns text and HTML diff between config bodies or saved versions.
 func (ConfigApi) Diff(c *gin.Context) {
 	var req services.DiffRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -91,6 +96,7 @@ func (ConfigApi) Diff(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// VersionList returns paginated config versions.
 func (ConfigApi) VersionList(c *gin.Context) {
 	params := queryParams(c)
 	items, total, err := configService.VersionList(params)
@@ -101,6 +107,7 @@ func (ConfigApi) VersionList(c *gin.Context) {
 	response.Ok(commonDomains.PageResult{Data: items, Total: total, Page: commonUtils.Str2Int(params["page"]), Size: commonUtils.Str2Int(params["size"])}, c)
 }
 
+// VersionGet returns a saved config version by guid.
 func (ConfigApi) VersionGet(c *gin.Context) {
 	result, err := configService.VersionGet(c.Param("guid"))
 	if err != nil {
@@ -110,6 +117,7 @@ func (ConfigApi) VersionGet(c *gin.Context) {
 	response.Ok(result, c)
 }
 
+// TaskList returns publish and rollback task history.
 func (ConfigApi) TaskList(c *gin.Context) {
 	params := queryParams(c)
 	items, total, err := configService.TaskList(params)

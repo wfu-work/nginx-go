@@ -33,14 +33,17 @@ type UpstreamServerHealth struct {
 	LatencyMs  int64  `json:"latencyMs"`
 }
 
+// List returns paginated upstream groups.
 func (s UpstreamService) List(params map[string]string) (interface{}, int64, error) {
 	return s.CrudService.List(commonUtils.ToPageInfo(params), "name,method")
 }
 
+// Create stores an upstream group.
 func (s UpstreamService) Create(upstream domains.Upstream) error {
 	return s.CrudService.Create(upstream)
 }
 
+// Update updates an upstream group by guid.
 func (s UpstreamService) Update(guid string, upstream domains.Upstream) error {
 	if guid == "" {
 		return errors.New("missing upstream guid")
@@ -49,6 +52,7 @@ func (s UpstreamService) Update(guid string, upstream domains.Upstream) error {
 	return s.CrudService.Updates(upstream)
 }
 
+// Delete soft-deletes an upstream group by guid.
 func (s UpstreamService) Delete(guid string) error {
 	if guid == "" {
 		return errors.New("missing upstream guid")
@@ -56,6 +60,7 @@ func (s UpstreamService) Delete(guid string) error {
 	return s.CrudService.DeleteByGuid(guid)
 }
 
+// Get returns an upstream group together with its servers.
 func (s UpstreamService) Get(guid string) (map[string]any, error) {
 	upstream, err := s.CrudService.GetByGuid(guid)
 	if err != nil {
@@ -71,6 +76,7 @@ func (s UpstreamService) Get(guid string) (map[string]any, error) {
 	return map[string]any{"upstream": upstream, "servers": servers}, nil
 }
 
+// Health checks TCP connectivity for every server in one upstream group.
 func (s UpstreamService) Health(guid string) (UpstreamHealthResult, error) {
 	if guid == "" {
 		return UpstreamHealthResult{}, errors.New("missing upstream guid")
@@ -103,6 +109,7 @@ func (s UpstreamService) Health(guid string) (UpstreamHealthResult, error) {
 	return result, nil
 }
 
+// CollectHealth stores upstream health snapshots as metric samples for dashboard use.
 func (s UpstreamService) CollectHealth() error {
 	var upstreams []domains.Upstream
 	if err := global.NAV_DB.Order("id asc").Find(&upstreams).Error; err != nil {
@@ -130,15 +137,26 @@ func (s UpstreamService) CollectHealth() error {
 		}); createErr != nil && firstErr == nil {
 			firstErr = createErr
 		}
+		if !result.Healthy {
+			ServiceGroupApp.EventNotificationService.Notify(EventNotificationCreate{
+				Title:      "上游健康检查异常",
+				Content:    result.Name + " 存在不可用节点",
+				Level:      domains.EventNotificationLevelWarning,
+				SourceType: "upstream",
+				SourceGuid: result.UpstreamGuid,
+			})
+		}
 	}
 	return firstErr
 }
 
+// CreateServer stores an upstream server node after applying default nginx values.
 func (s UpstreamService) CreateServer(server domains.UpstreamServer) error {
 	defaultUpstreamServer(&server)
 	return s.serverCrud.Create(server)
 }
 
+// UpdateServer updates one upstream server node by guid.
 func (s UpstreamService) UpdateServer(guid string, server domains.UpstreamServer) error {
 	if guid == "" {
 		return errors.New("missing upstream server guid")
@@ -148,6 +166,7 @@ func (s UpstreamService) UpdateServer(guid string, server domains.UpstreamServer
 	return s.serverCrud.Updates(server)
 }
 
+// DeleteServer soft-deletes one upstream server node by guid.
 func (s UpstreamService) DeleteServer(guid string) error {
 	if guid == "" {
 		return errors.New("missing upstream server guid")
